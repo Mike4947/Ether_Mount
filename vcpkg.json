@@ -1,0 +1,8 @@
+{
+  "name": "ethermount",
+  "version": "0.0.1",
+  "description": "EtherMount - SFTP virtual filesystem mount for Windows",
+  "dependencies": [
+    "libssh2"
+  ]
+}
