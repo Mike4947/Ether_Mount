@@ -32,7 +32,7 @@ cd installer
 Open `EtherMount.iss` in Inno Setup Compiler, or run from command line:
 
 ```powershell
-"C:\Users\mlebl\AppData\Local\Programs\Inno Setup 6\ISCC.exe" EtherMount.iss
+"C:\Users\username\AppData\Local\Programs\Inno Setup 6\ISCC.exe" EtherMount.iss
 ```
 
 The installer will be created at `installer/output/EtherMount-Setup-0.0.3.exe`. Add `installer/output/` and `installer/payload/` to `.gitignore` if you do not want to commit built artifacts.
@@ -57,5 +57,5 @@ Edit `EtherMount.iss` to:
 ## One-Line Build (from project root)
 
 ```powershell
-cmake --build build --config Release; .\installer\package.ps1; & "C:\Users\mlebl\AppData\Local\Programs\Inno Setup 6\ISCC.exe" installer\EtherMount.iss
+cmake --build build --config Release; .\installer\package.ps1; & "C:\Users\username\AppData\Local\Programs\Inno Setup 6\ISCC.exe" installer\EtherMount.iss
 ```
