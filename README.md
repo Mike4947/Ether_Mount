@@ -1,87 +1,80 @@
-# EtherMount v0.01
+# EtherMount v0.02
 
-Proof-of-concept C++ console application that establishes a secure SSH/SFTP connection to a remote server and lists directory contents.
+Windows application that mounts a remote VPS (via SFTP) as a native network drive in File Explorer.
+
+**Source code & documentation:** [https://github.com/Mike4947/Ether_Mount](https://github.com/Mike4947/Ether_Mount)
+
+## Credential Security
+
+**Your VPS credentials are never stored in the source code or committed to Git.** They are:
+
+- Encrypted with **Windows DPAPI** (CryptProtectData)
+- Stored in `%APPDATA%\EtherMount\credentials.dat` (outside the repo)
+- Safe to commit your code — no secrets in the repository
+
+## Architecture (v0.02)
+
+| Pillar | Component | Description |
+|--------|-----------|-------------|
+| **Security** | `CredentialManager` | DPAPI-encrypted storage of Host, Port, Username, Password in `%APPDATA%/EtherMount/credentials.dat` |
+| **GUI** | `MainWindow` + `TrayApplication` + `SettingsDialog` | Main window with toolbar (Settings, Mount VPS, Unmount VPS, Exit); system tray; inline settings and documentation |
+| **VFS** | `EtherMountFS` | WinFSP skeleton: mounts `\\EtherMount\VPS` as drive Z:; SFTP mapping in future versions |
 
 ## Requirements
 
-- **C++17** or later
-- **libssh2** (SSH/SFTP client library)
+- **Windows 10/11**
+- **C++17**
 - **CMake** 3.16+
-- **vcpkg** (recommended for dependency management on Windows)
+- **vcpkg** (for libssh2, Qt6)
+- **WinFSP** (install separately)
 
 ## Dependencies
 
-### Option A: vcpkg (Recommended for Windows)
+### vcpkg (libssh2, Qt6)
 
-1. Install [vcpkg](https://vcpkg.io/en/docs/getting-started.html) if not already installed.
+```powershell
+vcpkg install
+```
 
-2. From the project root, run:
-   ```powershell
-   vcpkg install
-   ```
-   This uses the `vcpkg.json` manifest to install libssh2.
+### WinFSP
 
-3. Configure CMake with the vcpkg toolchain:
-   ```powershell
-   cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=[path-to-vcpkg]/scripts/buildsystems/vcpkg.cmake
-   ```
-   Or set `VCPKG_ROOT` and use:
-   ```powershell
-   cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
-   ```
+WinFSP is not in vcpkg. Install via:
 
-### Option B: Visual Studio with vcpkg
+```powershell
+winget install WinFsp.WinFsp
+```
 
-1. Integrate vcpkg with Visual Studio:
-   ```powershell
-   vcpkg integrate install
-   ```
+Or download from [WinFSP releases](https://github.com/winfsp/winfsp/releases). Choose the **Developer** option to install headers and libs.
 
-2. Open the project folder in Visual Studio (File → Open → Folder).
+Default install path: `C:\Program Files (x86)\WinFsp`. If different, set `WINFSP_ROOT` before configuring:
 
-3. Visual Studio will detect `CMakeLists.txt` and `vcpkg.json` and configure vcpkg automatically.
-
-### Option C: Manual libssh2 Installation
-
-1. Build or obtain libssh2 for your platform (e.g., from [libssh2 releases](https://github.com/libssh2/libssh2/releases) or your package manager).
-
-2. Point CMake to the installation:
-   ```powershell
-   cmake -B build -S . -DCMAKE_PREFIX_PATH="C:/path/to/libssh2"
-   ```
-   Ensure libssh2 provides a CMake config (e.g., via vcpkg or a custom `Findlibssh2.cmake`).
+```powershell
+$env:WINFSP_ROOT = "C:\Path\To\WinFsp"
+```
 
 ## Building
 
 ```powershell
 cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
-cmake --build build
+cmake --build build --config Release
 ```
 
 ## Running
 
 ```powershell
-.\build\Debug\EtherMount.exe
+.\build\Release\EtherMount.exe
 ```
 
-Or from the build directory:
-```powershell
-.\EtherMount.exe
-```
+The app opens a **main window** with settings and documentation, plus a **system tray icon** for quick access.
 
-## Configuration (v0.01)
+## Usage
 
-The following are hardcoded in `src/main.cpp` for this proof-of-concept:
-
-| Variable        | Default Value   | Description                    |
-|----------------|-----------------|--------------------------------|
-| `DEFAULT_HOST` | `198.51.100.0`  | Mock server IP (TEST-NET range) |
-| `DEFAULT_PORT` | `22`            | SSH port                       |
-| `DEFAULT_USERNAME` | `testuser`  | SSH username                   |
-| `DEFAULT_PASSWORD` | `testpass`  | SSH password                   |
-| `DEFAULT_REMOTE_PATH` | `/var/www/` | Remote directory to list |
-
-**Note:** `198.51.100.0` is a documentation-only address (TEST-NET-2 per RFC 5737) and will not resolve to a real host. Replace with your actual VPS IP to test against a real server.
+1. **Main window** opens on startup with toolbar: **Settings** | **Mount VPS** | **Unmount VPS** | **Exit**
+2. Enter **Host/IP**, **Port** (default 22), **Username**, **Password** in the settings form
+3. Click **Save credentials** — encrypted with DPAPI and stored locally
+4. Click **Mount VPS** — drive Z: appears (UNC: `\\EtherMount\VPS`)
+5. Click **Unmount VPS** — drive is unmounted
+6. **Right-click tray icon** for the same menu; **double-click** to restore the main window
 
 ## Project Structure
 
@@ -90,18 +83,58 @@ EtherMount/
 ├── CMakeLists.txt
 ├── vcpkg.json
 ├── README.md
-├── include/
-│   └── EtherMount/
-│       └── SftpClient.hpp      # Modular SFTP client class
+├── include/EtherMount/
+│   ├── CredentialManager.hpp   # Pillar 1: Secure credential storage
+│   ├── SftpClient.hpp          # libssh2 SFTP client (from v0.01)
+│   ├── MainWindow.hpp          # Pillar 2: Main window (toolbar, settings, docs)
+│   ├── SettingsDialog.hpp     # Pillar 2: Qt Settings dialog
+│   ├── TrayApplication.hpp     # Pillar 2: System tray + menu
+│   └── EtherMountFS.hpp        # Pillar 3: WinFSP launcher
 └── src/
-    ├── main.cpp                # Console entry point
-    └── SftpClient.cpp          # SftpClient implementation
+    ├── main.cpp                # Entry point, wires all pillars
+    ├── CredentialManager.cpp
+    ├── SftpClient.cpp
+    ├── SettingsDialog.cpp
+    ├── MainWindow.cpp
+    ├── TrayApplication.cpp
+    └── EtherMountFS.cpp
 ```
 
-The `SftpClient` class is designed for reuse when migrating to a background service or GUI application.
+## How the Three Pillars Wire Together
+
+```
+main.cpp
+    |
+    v
+TrayApplication (QApplication)
+    |
+    +-- CredentialManager
+    |       save()  -> CryptProtectData -> %APPDATA%/EtherMount/credentials.dat
+    |       load()  -> CryptUnprotectData -> VpsCredentials
+    |
+    +-- SettingsDialog
+    |       loadFromStorage() -> CredentialManager::load()
+    |       saveToStorage()   -> CredentialManager::save()
+    |
+    +-- EtherMountFS
+    |       mount(creds)   -> FspLoad, FspFileSystemCreate, SetMountPoint(Z:), StartDispatcher
+    |       unmount()      -> FspFileSystemStopDispatcher, FspFileSystemDelete
+    |
+    +-- Tray menu actions
+            Settings   -> show SettingsDialog
+            Mount VPS  -> credentialManager_.load() -> fileSystem_->mount(creds)
+            Unmount VPS-> fileSystem_->unmount()
+            Exit       -> unmount if needed, quit()
+```
+
+## v0.02 Limitations
+
+- **EtherMountFS** is a skeleton: Z: mounts and shows an empty root. SFTP read/write is not yet implemented.
+- Credentials are stored per-user (DPAPI user context).
+- Single mount point (Z:) — configurable drive letter in future.
 
 ## Next Steps (Future Versions)
 
-- Command-line or config-file based credentials
-- WinFSP integration for virtual drive mounting
-- Background service architecture
+- Map WinFSP operations (Read, Write, ReadDirectory, etc.) to SftpClient
+- Configurable drive letter
+- Optional key-based authentication

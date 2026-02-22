@@ -1,8 +1,16 @@
 {
   "name": "ethermount",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "EtherMount - SFTP virtual filesystem mount for Windows",
+  "builtin-baseline": "05442024c3fda64320bd25d2251cc9807b84fb6f",
   "dependencies": [
-    "libssh2"
+    "libssh2",
+    {
+      "name": "qtbase",
+      "default-features": false,
+      "features": [
+        "widgets"
+      ]
+    }
   ]
 }

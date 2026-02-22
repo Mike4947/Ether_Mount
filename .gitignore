@@ -1,0 +1,22 @@
+# Build
+build/
+out/
+cmake-build-*/
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+
+# Credentials - never commit (stored in %APPDATA%/EtherMount/ outside repo)
+credentials.dat
+*.credentials
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store

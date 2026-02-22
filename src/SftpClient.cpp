@@ -47,8 +47,8 @@ SftpClient::~SftpClient() {
 Result SftpClient::initialize() {
 #ifdef _WIN32
     WSADATA wsadata;
-    int rc = WSAStartup(MAKEWORD(2, 2), &wsadata);
-    if (rc != 0) {
+    int wsa_rc = WSAStartup(MAKEWORD(2, 2), &wsadata);
+    if (wsa_rc != 0) {
         return Result::InitFailed;
     }
     winsock_initialized_ = true;
@@ -84,8 +84,8 @@ Result SftpClient::connect(const std::string& host, std::uint16_t port,
     sin.sin_port = htons(port);
     sin.sin_addr.s_addr = inet_addr(host.c_str());
 
-    if (connect(socket_, reinterpret_cast<struct sockaddr*>(&sin),
-                sizeof(sin)) == SOCKET_ERROR_VALUE) {
+    if (::connect(socket_, reinterpret_cast<struct sockaddr*>(&sin),
+                  sizeof(sin)) == SOCKET_ERROR_VALUE) {
         closeSocket(socket_);
         socket_ = LIBSSH2_INVALID_SOCKET;
         return Result::ConnectFailed;
