@@ -1,5 +1,7 @@
 # Build
 build/
+installer/payload/
+installer/output/
 out/
 cmake-build-*/
 .vs/

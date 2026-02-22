@@ -72,6 +72,7 @@ Result SftpClient::connect(const std::string& host, std::uint16_t port,
     if (!libssh2_initialized_) {
         return Result::InitFailed;
     }
+    std::lock_guard<std::mutex> lock(mutex_);
 
     // Create TCP socket
     socket_ = socket(AF_INET, SOCK_STREAM, 0);
@@ -120,6 +121,7 @@ Result SftpClient::connect(const std::string& host, std::uint16_t port,
 }
 
 Result SftpClient::initSftp() {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (!session_) {
         return Result::AuthFailed;
     }
@@ -134,6 +136,7 @@ Result SftpClient::initSftp() {
 
 Result SftpClient::listDirectory(const std::string& remote_path,
                                  std::vector<DirEntry>& out_entries) {
+    std::lock_guard<std::mutex> lock(mutex_);
     out_entries.clear();
 
     if (!sftp_session_) {
@@ -154,7 +157,6 @@ Result SftpClient::listDirectory(const std::string& remote_path,
         int rc = libssh2_sftp_readdir_ex(handle, mem, sizeof(mem), longentry,
                                          sizeof(longentry), &attrs);
         if (rc > 0) {
-            // Skip . and ..
             if (std::strcmp(mem, ".") == 0 || std::strcmp(mem, "..") == 0) {
                 continue;
             }
@@ -167,6 +169,10 @@ Result SftpClient::listDirectory(const std::string& remote_path,
             if (attrs.flags & LIBSSH2_SFTP_ATTR_SIZE) {
                 entry.size = attrs.filesize;
             }
+            if (attrs.flags & LIBSSH2_SFTP_ATTR_ACMODTIME) {
+                entry.mtime = attrs.mtime;
+                entry.atime = attrs.atime;
+            }
 
             out_entries.push_back(std::move(entry));
         } else {
@@ -178,7 +184,105 @@ Result SftpClient::listDirectory(const std::string& remote_path,
     return Result::Success;
 }
 
+std::optional<FileInfo> SftpClient::getFileInfo(const std::string& remote_path) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!sftp_session_) {
+        return std::nullopt;
+    }
+
+    LIBSSH2_SFTP_ATTRIBUTES attrs;
+    int rc = libssh2_sftp_stat(sftp_session_, remote_path.c_str(), &attrs);
+    if (rc != 0) {
+        return std::nullopt;
+    }
+
+    FileInfo info;
+    info.is_directory =
+        (attrs.flags & LIBSSH2_SFTP_ATTR_PERMISSIONS) &&
+        LIBSSH2_SFTP_S_ISDIR(attrs.permissions);
+    info.size = (attrs.flags & LIBSSH2_SFTP_ATTR_SIZE) ? attrs.filesize : 0;
+    info.mtime = (attrs.flags & LIBSSH2_SFTP_ATTR_ACMODTIME) ? attrs.mtime : 0;
+    info.atime = (attrs.flags & LIBSSH2_SFTP_ATTR_ACMODTIME) ? attrs.atime : 0;
+    return info;
+}
+
+std::unique_ptr<SftpHandle> SftpClient::openFile(const std::string& remote_path) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!sftp_session_) {
+        return nullptr;
+    }
+
+    LIBSSH2_SFTP_HANDLE* h =
+        libssh2_sftp_open(sftp_session_, remote_path.c_str(),
+                          LIBSSH2_FXF_READ, 0);
+    if (!h) {
+        return nullptr;
+    }
+
+    auto handle = std::make_unique<SftpHandle>();
+    handle->handle = h;
+    handle->is_directory = false;
+    return handle;
+}
+
+std::unique_ptr<SftpHandle> SftpClient::openDirectory(const std::string& remote_path) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!sftp_session_) {
+        return nullptr;
+    }
+
+    LIBSSH2_SFTP_HANDLE* h =
+        libssh2_sftp_opendir(sftp_session_, remote_path.c_str());
+    if (!h) {
+        return nullptr;
+    }
+
+    auto handle = std::make_unique<SftpHandle>();
+    handle->handle = h;
+    handle->is_directory = true;
+    return handle;
+}
+
+int64_t SftpClient::readFile(SftpHandle* handle, void* buffer, uint64_t offset,
+                             uint32_t length) {
+    if (!handle || !handle->handle || handle->is_directory) {
+        return -1;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    libssh2_sftp_seek64(handle->handle, offset);
+
+    char* buf = static_cast<char*>(buffer);
+    size_t total = 0;
+    while (total < length) {
+        size_t to_read = static_cast<size_t>(length) - total;
+        ssize_t n = libssh2_sftp_read(handle->handle, buf + total, to_read);
+        if (n > 0) {
+            total += static_cast<size_t>(n);
+        } else if (n == 0) {
+            break;
+        } else {
+            return -1;
+        }
+    }
+    return static_cast<int64_t>(total);
+}
+
+void SftpClient::closeHandle(std::unique_ptr<SftpHandle> h) {
+    if (!h) return;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (h->handle && sftp_session_) {
+        if (h->is_directory) {
+            libssh2_sftp_closedir(h->handle);
+        } else {
+            libssh2_sftp_close(h->handle);
+        }
+        h->handle = nullptr;
+    }
+}
+
 void SftpClient::disconnect() {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (sftp_session_) {
         libssh2_sftp_shutdown(sftp_session_);
         sftp_session_ = nullptr;
@@ -213,6 +317,7 @@ std::string SftpClient::getLastError() const {
 }
 
 void SftpClient::cleanupSession() {
+    // Called with mutex held
     if (session_) {
         libssh2_session_disconnect(session_, "Normal Shutdown");
         libssh2_session_free(session_);

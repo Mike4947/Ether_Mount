@@ -9,7 +9,7 @@ namespace EtherMount {
 
 /// WinFSP-based virtual file system launcher.
 /// Mounts the VPS as a network drive (e.g. Z:) with UNC path \\EtherMount\VPS.
-/// v0.02: Skeleton implementation - mounts/unmounts; SFTP mapping in future versions.
+/// v0.03: Read-only bridge - connects SftpClient; browse dirs, read files, copy from VPS.
 class EtherMountFS {
 public:
     EtherMountFS();
