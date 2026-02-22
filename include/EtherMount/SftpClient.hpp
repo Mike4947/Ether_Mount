@@ -54,6 +54,9 @@ enum class Result {
     OpenFailed,
     StatFailed,
     ReadFailed,
+    WriteFailed,
+    UnlinkFailed,
+    RmdirFailed,
 };
 
 /// Modular SFTP client for SSH/SFTP operations.
@@ -100,6 +103,21 @@ public:
     /// Returns number of bytes read, or negative on error (thread-safe).
     int64_t readFile(SftpHandle* handle, void* buffer, uint64_t offset,
                      uint32_t length);
+
+    /// Write to file. Returns number of bytes written, or negative on error (thread-safe).
+    int64_t writeFile(SftpHandle* handle, const void* buffer, uint32_t length);
+
+    /// Download remote file to local path. Returns Success on completion.
+    Result downloadFile(const std::string& remote_path, const std::string& local_path);
+
+    /// Upload local file to remote path. Returns Success on completion.
+    Result uploadFile(const std::string& local_path, const std::string& remote_path);
+
+    /// Delete remote file. Returns Success on completion.
+    Result removeFile(const std::string& remote_path);
+
+    /// Remove empty remote directory. Returns Success on completion.
+    Result removeDirectory(const std::string& remote_path);
 
     /// Close handle (thread-safe). No-op if handle is null.
     void closeHandle(std::unique_ptr<SftpHandle> handle);

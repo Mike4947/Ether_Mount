@@ -1,9 +1,11 @@
 #include "EtherMount/MainWindow.hpp"
 #include "EtherMount/SettingsDialog.hpp"
 #include "EtherMount/EtherMountFS.hpp"
+#include "EtherMount/ShellExtRegistrar.hpp"
 
 #include <QAction>
 #include <QApplication>
+#include <QComboBox>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QLabel>
@@ -47,6 +49,11 @@ void MainWindow::init() {
         portSpin_->setValue(static_cast<int>(creds->port));
         usernameEdit_->setText(QString::fromStdString(creds->username));
         passwordEdit_->setText(QString::fromStdString(creds->password));
+        remotePathEdit_->setText(QString::fromStdString(creds->remotePath));
+        QString dl = QString::fromStdString(creds->driveLetter).toUpper();
+        if (dl.isEmpty()) dl = "Z";
+        driveCombo_->setCurrentText(dl + ":");
+        displayNameEdit_->setText(QString::fromStdString(creds->displayName));
     }
 
     show();
@@ -90,18 +97,20 @@ void MainWindow::setupCentralWidget() {
     welcomeLabel->setTextFormat(Qt::RichText);
     welcomeLabel->setText(
         "<h2 style='margin-top:0;'>Welcome to EtherMount</h2>"
-        "<p>EtherMount mounts your remote VPS (via SFTP) as a <b>native network drive</b> in Windows File Explorer. "
-        "You can browse, open, and manage files on your server as if they were on a local disk.</p>"
+        "<p>EtherMount lets you browse your remote VPS (via SFTP) in Windows File Explorer. "
+        "Use the <b>Network</b> folder for a WinSCP-style browser, or the <b>drive letter</b> (requires WinFSP).</p>"
         "<p><b>How it works:</b></p>"
         "<ol>"
         "<li>Enter your VPS connection details below (Host, Port, Username, Password).</li>"
+        "<li>Set the <b>folder name</b> (e.g. \"EtherMount VPS\") — this appears under <b>Network</b> in File Explorer.</li>"
         "<li>Click <b>Save</b> to store your credentials securely (encrypted with Windows DPAPI).</li>"
-        "<li>Click <b>Mount VPS</b> — a new drive (e.g. Z:) will appear in File Explorer.</li>"
-        "<li>Browse your remote files at <code>\\\\EtherMount\\VPS</code> or the assigned drive letter.</li>"
-        "<li>Click <b>Unmount VPS</b> when done to disconnect.</li>"
+        "<li><b>Option A (recommended):</b> Open File Explorer → <b>Network</b> → your folder name. A WinSCP-style browser opens.</li>"
+        "<li><b>Option B:</b> Tray menu → <b>Browse VPS</b> — same browser window.</li>"
+        "<li><b>Option C:</b> Click <b>Mount VPS</b> for drive letter access (requires WinFSP).</li>"
+        "<li>Click <b>Unmount VPS</b> when done (drive letter only).</li>"
         "</ol>"
-        "<p><b>Requirements:</b> WinFSP must be installed for mounting. "
-        "<a href='https://github.com/winfsp/winfsp/releases'>Download WinFSP</a> and run the installer with the <b>Developer</b> option.</p>"
+        "<p><b>Requirements:</b> For drive letter: WinFSP. "
+        "<a href='https://github.com/winfsp/winfsp/releases'>Download WinFSP</a> with <b>Developer</b> option.</p>"
     );
     welcomeLabel->setOpenExternalLinks(true);
     welcomeLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
@@ -131,6 +140,24 @@ void MainWindow::setupCentralWidget() {
     passwordEdit_->setEchoMode(QLineEdit::Password);
     passwordEdit_->setMaxLength(512);
     formLayout->addRow(tr("Password:"), passwordEdit_);
+
+    remotePathEdit_ = new QLineEdit(this);
+    remotePathEdit_->setPlaceholderText(tr("e.g. /var/www/flowdesk (default: /)"));
+    remotePathEdit_->setMaxLength(512);
+    formLayout->addRow(tr("Remote path:"), remotePathEdit_);
+
+    driveCombo_ = new QComboBox(this);
+    for (char c = 'D'; c <= 'Z'; ++c) {
+        driveCombo_->addItem(QString(QChar(c)) + ":");
+    }
+    driveCombo_->setCurrentText("Z:");
+    formLayout->addRow(tr("Drive letter:"), driveCombo_);
+
+    displayNameEdit_ = new QLineEdit(this);
+    displayNameEdit_->setPlaceholderText(tr("e.g. EtherMount VPS or Server (shown under This PC)"));
+    displayNameEdit_->setMaxLength(64);
+    displayNameEdit_->setText("EtherMount VPS");
+    formLayout->addRow(tr("Folder name (This PC):"), displayNameEdit_);
 
     auto* saveBtn = new QPushButton(tr("Save credentials"), this);
     connect(saveBtn, &QPushButton::clicked, this, &MainWindow::onSaveSettings);
@@ -178,6 +205,10 @@ void MainWindow::onSettings() {
                 portSpin_->setValue(static_cast<int>(creds->port));
                 usernameEdit_->setText(QString::fromStdString(creds->username));
                 passwordEdit_->setText(QString::fromStdString(creds->password));
+                remotePathEdit_->setText(QString::fromStdString(creds->remotePath));
+                QString dl = QString::fromStdString(creds->driveLetter).toUpper();
+                if (dl.isEmpty()) dl = "Z";
+                driveCombo_->setCurrentText(dl + ":");
             }
         });
     }
@@ -195,6 +226,15 @@ void MainWindow::onMountVps() {
     creds.port = static_cast<std::uint16_t>(portSpin_->value());
     creds.username = usernameEdit_->text().trimmed().toStdString();
     creds.password = passwordEdit_->text().toStdString();
+    std::string rp = remotePathEdit_->text().trimmed().toStdString();
+    creds.remotePath = (rp.empty() ? "/" : rp);
+    if (creds.remotePath.size() > 1 && creds.remotePath.back() == '/') creds.remotePath.pop_back();
+    if (creds.remotePath.empty()) creds.remotePath = "/";
+    if (creds.remotePath[0] != '/') creds.remotePath = "/" + creds.remotePath;
+    QString dl = driveCombo_->currentText().trimmed();
+    creds.driveLetter = (dl.isEmpty() ? "Z" : dl.left(1).toUpper().toStdString());
+    std::string dn = displayNameEdit_->text().trimmed().toStdString();
+    creds.displayName = (dn.empty() ? "EtherMount VPS" : dn);
 
     if (creds.host.empty() || creds.username.empty()) {
         QMessageBox::information(this, tr("EtherMount"),
@@ -243,6 +283,15 @@ void MainWindow::onSaveSettings() {
     creds.port = static_cast<std::uint16_t>(portSpin_->value());
     creds.username = usernameEdit_->text().trimmed().toStdString();
     creds.password = passwordEdit_->text().toStdString();
+    std::string rp = remotePathEdit_->text().trimmed().toStdString();
+    creds.remotePath = (rp.empty() ? "/" : rp);
+    if (creds.remotePath.size() > 1 && creds.remotePath.back() == '/') creds.remotePath.pop_back();
+    if (creds.remotePath.empty()) creds.remotePath = "/";
+    if (creds.remotePath[0] != '/') creds.remotePath = "/" + creds.remotePath;
+    QString dl = driveCombo_->currentText().trimmed();
+    creds.driveLetter = (dl.isEmpty() ? "Z" : dl.left(1).toUpper().toStdString());
+    std::string dn = displayNameEdit_->text().trimmed().toStdString();
+    creds.displayName = (dn.empty() ? "EtherMount VPS" : dn);
 
     if (creds.host.empty()) {
         QMessageBox::warning(this, tr("Validation Error"), tr("Host/IP is required."));
@@ -260,8 +309,15 @@ void MainWindow::onSaveSettings() {
         return;
     }
 
-    QMessageBox::information(this, tr("EtherMount"),
-        tr("Credentials saved securely. You can now click Mount VPS."));
+    // Register/update Shell Namespace Extension (folder under Network)
+    if (ShellExtRegistrar::registerShellExt(creds.displayName)) {
+        QMessageBox::information(this, tr("EtherMount"),
+            tr("Credentials saved. Open File Explorer → Network to see \"%1\" (double-click opens the browser), or use tray → Browse VPS.")
+                .arg(QString::fromStdString(creds.displayName)));
+    } else {
+        QMessageBox::information(this, tr("EtherMount"),
+            tr("Credentials saved. Ensure EtherMountShellExt.dll is next to EtherMount.exe. You can click Mount VPS."));
+    }
 }
 
 } // namespace EtherMount

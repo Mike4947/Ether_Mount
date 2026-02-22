@@ -12,6 +12,12 @@ struct VpsCredentials {
     std::uint16_t port{22};
     std::string username;
     std::string password;
+    /// Remote base path (e.g. /var/www/flowdesk). Drive root maps to this. Default "/".
+    std::string remotePath{"/"};
+    /// Drive letter (e.g. "Z"). The drive will appear as "Z:". Default "Z".
+    std::string driveLetter{"Z"};
+    /// Display name for Shell namespace folder (e.g. "EtherMount VPS", "Server"). Shown under This PC.
+    std::string displayName{"EtherMount VPS"};
 };
 
 /// Result of credential operations.

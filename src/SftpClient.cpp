@@ -12,6 +12,7 @@
 #endif
 
 #include <cstring>
+#include <fstream>
 #include <sstream>
 
 namespace EtherMount {
@@ -266,6 +267,91 @@ int64_t SftpClient::readFile(SftpHandle* handle, void* buffer, uint64_t offset,
         }
     }
     return static_cast<int64_t>(total);
+}
+
+int64_t SftpClient::writeFile(SftpHandle* handle, const void* buffer, uint32_t length) {
+    if (!handle || !handle->handle || handle->is_directory) {
+        return -1;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    ssize_t n = libssh2_sftp_write(handle->handle, static_cast<const char*>(buffer), length);
+    return (n >= 0) ? static_cast<int64_t>(n) : -1;
+}
+
+Result SftpClient::downloadFile(const std::string& remote_path, const std::string& local_path) {
+    auto handle = openFile(remote_path);
+    if (!handle) return Result::OpenFailed;
+
+    std::vector<char> buf(64 * 1024);
+    std::ofstream out(local_path, std::ios::binary);
+    if (!out) {
+        closeHandle(std::move(handle));
+        return Result::ReadFailed;
+    }
+
+    int64_t total = 0;
+    while (true) {
+        int64_t n = readFile(handle.get(), buf.data(), static_cast<uint64_t>(total),
+                             static_cast<uint32_t>(buf.size()));
+        if (n < 0) {
+            closeHandle(std::move(handle));
+            return Result::ReadFailed;
+        }
+        if (n == 0) break;
+        out.write(buf.data(), n);
+        if (!out.good()) {
+            closeHandle(std::move(handle));
+            return Result::ReadFailed;
+        }
+        total += n;
+    }
+    closeHandle(std::move(handle));
+    return Result::Success;
+}
+
+Result SftpClient::uploadFile(const std::string& local_path, const std::string& remote_path) {
+    std::ifstream in(local_path, std::ios::binary | std::ios::ate);
+    if (!in) return Result::WriteFailed;
+    std::streamsize size = in.tellg();
+    in.seekg(0, std::ios::beg);
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!sftp_session_) return Result::SftpInitFailed;
+
+    LIBSSH2_SFTP_HANDLE* h = libssh2_sftp_open(sftp_session_, remote_path.c_str(),
+        LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT | LIBSSH2_FXF_TRUNC,
+        LIBSSH2_SFTP_S_IRUSR | LIBSSH2_SFTP_S_IWUSR | LIBSSH2_SFTP_S_IRGRP | LIBSSH2_SFTP_S_IROTH);
+    if (!h) return Result::WriteFailed;
+
+    std::vector<char> buf(64 * 1024);
+    std::streamsize total = 0;
+    while (total < size) {
+        in.read(buf.data(), buf.size());
+        std::streamsize rd = in.gcount();
+        if (rd <= 0) break;
+        ssize_t wr = libssh2_sftp_write(h, buf.data(), static_cast<size_t>(rd));
+        if (wr != rd) {
+            libssh2_sftp_close(h);
+            return Result::WriteFailed;
+        }
+        total += rd;
+    }
+    libssh2_sftp_close(h);
+    return Result::Success;
+}
+
+Result SftpClient::removeFile(const std::string& remote_path) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!sftp_session_) return Result::SftpInitFailed;
+    int rc = libssh2_sftp_unlink(sftp_session_, remote_path.c_str());
+    return (rc == 0) ? Result::Success : Result::UnlinkFailed;
+}
+
+Result SftpClient::removeDirectory(const std::string& remote_path) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!sftp_session_) return Result::SftpInitFailed;
+    int rc = libssh2_sftp_rmdir(sftp_session_, remote_path.c_str());
+    return (rc == 0) ? Result::Success : Result::RmdirFailed;
 }
 
 void SftpClient::closeHandle(std::unique_ptr<SftpHandle> h) {

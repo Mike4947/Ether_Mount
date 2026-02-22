@@ -9,6 +9,7 @@
 namespace EtherMount {
 
 class MainWindow;
+class BrowserWindow;
 
 /// System tray application for EtherMount.
 /// Manages tray icon, context menu, and coordinates Settings/VFS.
@@ -20,6 +21,9 @@ public:
 
     /// Initialize tray icon and show.
     bool initTray();
+
+    /// Show the WinSCP-style browser window (called when opened from Network).
+    void showBrowserWindow();
 
 private slots:
     void onSettings();
@@ -37,6 +41,7 @@ private:
     QAction* mountAction_{nullptr};
     QAction* unmountAction_{nullptr};
     std::unique_ptr<MainWindow> mainWindow_;
+    std::unique_ptr<BrowserWindow> browserWindow_;
 };
 
 } // namespace EtherMount

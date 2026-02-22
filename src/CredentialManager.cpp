@@ -37,7 +37,9 @@ bool ensureDirectoryExists(const std::string& path) {
 std::string serialize(const VpsCredentials& creds) {
     std::ostringstream oss;
     oss << creds.host << DELIMITER << creds.port << DELIMITER
-        << creds.username << DELIMITER << creds.password;
+        << creds.username << DELIMITER << creds.password << DELIMITER
+        << creds.remotePath << DELIMITER << creds.driveLetter << DELIMITER
+        << creds.displayName;
     return oss.str();
 }
 
@@ -65,6 +67,24 @@ bool deserialize(const std::string& data, VpsCredentials& creds) {
 
     creds.username = next();
     creds.password = next();
+    if (pos < data.size()) {
+        creds.remotePath = next();
+        if (creds.remotePath.empty()) creds.remotePath = "/";
+    } else {
+        creds.remotePath = "/";
+    }
+    if (pos < data.size()) {
+        creds.driveLetter = next();
+        if (creds.driveLetter.empty()) creds.driveLetter = "Z";
+    } else {
+        creds.driveLetter = "Z";
+    }
+    if (pos < data.size()) {
+        creds.displayName = next();
+        if (creds.displayName.empty()) creds.displayName = "EtherMount VPS";
+    } else {
+        creds.displayName = "EtherMount VPS";
+    }
     return true;
 }
 #endif

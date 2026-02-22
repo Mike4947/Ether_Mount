@@ -2,6 +2,7 @@
 
 #include "EtherMount/CredentialManager.hpp"
 
+#include <QComboBox>
 #include <QMainWindow>
 #include <QLabel>
 #include <QLineEdit>
@@ -48,6 +49,9 @@ private:
     QSpinBox* portSpin_{nullptr};
     QLineEdit* usernameEdit_{nullptr};
     QLineEdit* passwordEdit_{nullptr};
+    QLineEdit* remotePathEdit_{nullptr};
+    QComboBox* driveCombo_{nullptr};
+    QLineEdit* displayNameEdit_{nullptr};
     QLabel* statusLabel_{nullptr};
 
     std::unique_ptr<SettingsDialog> settingsDialog_;

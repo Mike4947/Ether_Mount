@@ -1,5 +1,7 @@
 #include "EtherMount/SettingsDialog.hpp"
+#include "EtherMount/ShellExtRegistrar.hpp"
 
+#include <QComboBox>
 #include <QMessageBox>
 #include <QVBoxLayout>
 
@@ -38,6 +40,24 @@ void SettingsDialog::setupUi() {
     passwordEdit_->setMaxLength(512);
     formLayout->addRow(tr("Password:"), passwordEdit_);
 
+    remotePathEdit_ = new QLineEdit(this);
+    remotePathEdit_->setPlaceholderText(tr("e.g. /var/www/flowdesk (default: /)"));
+    remotePathEdit_->setMaxLength(512);
+    formLayout->addRow(tr("Remote path:"), remotePathEdit_);
+
+    driveCombo_ = new QComboBox(this);
+    for (char c = 'D'; c <= 'Z'; ++c) {
+        driveCombo_->addItem(QString(QChar(c)) + ":");
+    }
+    driveCombo_->setCurrentText("Z:");
+    formLayout->addRow(tr("Drive letter:"), driveCombo_);
+
+    displayNameEdit_ = new QLineEdit(this);
+    displayNameEdit_->setPlaceholderText(tr("e.g. EtherMount VPS or Server (shown under This PC)"));
+    displayNameEdit_->setMaxLength(64);
+    displayNameEdit_->setText("EtherMount VPS");
+    formLayout->addRow(tr("Folder name (This PC):"), displayNameEdit_);
+
     layout->addLayout(formLayout);
 
     auto* buttonBox = new QDialogButtonBox(
@@ -61,6 +81,11 @@ void SettingsDialog::setCredentials(const VpsCredentials& creds) {
     portSpin_->setValue(static_cast<int>(creds.port));
     usernameEdit_->setText(QString::fromStdString(creds.username));
     passwordEdit_->setText(QString::fromStdString(creds.password));
+    remotePathEdit_->setText(QString::fromStdString(creds.remotePath));
+    QString dl = QString::fromStdString(creds.driveLetter).toUpper();
+    if (dl.isEmpty()) dl = "Z";
+    driveCombo_->setCurrentText(dl + ":");
+    displayNameEdit_->setText(QString::fromStdString(creds.displayName));
 }
 
 VpsCredentials SettingsDialog::getCredentials() const {
@@ -69,6 +94,15 @@ VpsCredentials SettingsDialog::getCredentials() const {
     creds.port = static_cast<std::uint16_t>(portSpin_->value());
     creds.username = usernameEdit_->text().trimmed().toStdString();
     creds.password = passwordEdit_->text().toStdString();
+    std::string rp = remotePathEdit_->text().trimmed().toStdString();
+    creds.remotePath = (rp.empty() ? "/" : rp);
+    if (creds.remotePath.size() > 1 && creds.remotePath.back() == '/') creds.remotePath.pop_back();
+    if (creds.remotePath.empty()) creds.remotePath = "/";
+    if (creds.remotePath[0] != '/') creds.remotePath = "/" + creds.remotePath;
+    QString dl = driveCombo_->currentText().trimmed();
+    creds.driveLetter = (dl.isEmpty() ? "Z" : dl.left(1).toUpper().toStdString());
+    std::string dn = displayNameEdit_->text().trimmed().toStdString();
+    creds.displayName = (dn.empty() ? "EtherMount VPS" : dn);
     return creds;
 }
 
@@ -100,6 +134,7 @@ bool SettingsDialog::saveToStorage() {
                               tr("Failed to save credentials securely."));
         return false;
     }
+    ShellExtRegistrar::registerShellExt(creds.displayName);
     return true;
 }
 

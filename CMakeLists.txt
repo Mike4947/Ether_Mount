@@ -57,13 +57,16 @@ add_executable(EtherMount WIN32
     src/main.cpp
     src/SftpClient.cpp
     src/CredentialManager.cpp
+    src/ShellExtRegistrar.cpp
     src/SettingsDialog.cpp
     src/TrayApplication.cpp
     src/MainWindow.cpp
+    src/BrowserWindow.cpp
     src/EtherMountFS.cpp
     include/EtherMount/SettingsDialog.hpp
     include/EtherMount/TrayApplication.hpp
     include/EtherMount/MainWindow.hpp
+    include/EtherMount/BrowserWindow.hpp
 )
 
 target_include_directories(EtherMount PRIVATE
@@ -99,4 +102,27 @@ if(WIN32)
             COMMENT "Deploying Qt runtime..."
         )
     endif()
+
+    # --- Shell Namespace Extension (alternative to WinFSP drive - appears under This PC) ---
+    add_library(EtherMountShellExt SHARED
+        shellext/EtherMountShellExt.cpp
+        src/SftpClient.cpp
+        src/CredentialManager.cpp
+    )
+    target_include_directories(EtherMountShellExt PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_link_libraries(EtherMountShellExt PRIVATE
+        libssh2::libssh2
+        ws2_32
+        Crypt32
+        Shell32
+        Shlwapi
+        Ole32
+    )
+    set_target_properties(EtherMountShellExt PROPERTIES
+        OUTPUT_NAME "EtherMountShellExt"
+        PREFIX ""
+        SUFFIX ".dll"
+    )
 endif()

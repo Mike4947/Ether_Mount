@@ -1,5 +1,6 @@
 #include "EtherMount/TrayApplication.hpp"
 #include "EtherMount/MainWindow.hpp"
+#include "EtherMount/BrowserWindow.hpp"
 
 #include <QAction>
 #include <QMessageBox>
@@ -69,6 +70,9 @@ void TrayApplication::createTrayMenu() {
     auto* settingsAction = trayMenu_->addAction(tr("Settings"));
     connect(settingsAction, &QAction::triggered, this, &TrayApplication::onSettings);
 
+    auto* browseAction = trayMenu_->addAction(tr("Browse VPS"));
+    connect(browseAction, &QAction::triggered, this, &TrayApplication::showBrowserWindow);
+
     mountAction_ = trayMenu_->addAction(tr("Mount VPS"));
     unmountAction_ = trayMenu_->addAction(tr("Unmount VPS"));
 
@@ -108,6 +112,13 @@ void TrayApplication::onTrayActivated(QSystemTrayIcon::ActivationReason reason) 
         mainWindow_->raise();
         mainWindow_->activateWindow();
     }
+}
+
+void TrayApplication::showBrowserWindow() {
+    if (!browserWindow_) {
+        browserWindow_ = std::make_unique<BrowserWindow>();
+    }
+    browserWindow_->connectAndShow();
 }
 
 } // namespace EtherMount
